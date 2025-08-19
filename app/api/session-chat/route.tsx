@@ -1,44 +1,48 @@
 import { db } from "@/config/db";
-import { SessionChatTable, usersTable } from "@/config/schema";
+import { SessionChatTable } from "@/config/schema";
 import { currentUser } from "@clerk/nextjs/server";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
-// import {v4 as uuidv4} from 'uuid';
+import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(req:NextRequest) {
+    const{notes,selectedDoctor} = await req.json();
     const user = await currentUser();
-
-    try {
-        // Check if user Alrady Exists
-        const users = await db.select().from(usersTable)
-        //@ts-ignore
-        .where(eq(usersTable.email,user?.primaryEmailAddress?.emailAddress));
-        //If Not Then create new User
-        if(users?.length==0){
-            const result = await db.insert(usersTable).values({
-                //@ts-ignore
-                name: user?.fullName,
-                email: user?.primaryEmailAddress?.emailAddress,
-                credits:10
-                //@ts-ignore
-            });returning({usersTable})
+    try{
+        const sessionId = uuidv4();
+        const result = await db.insert(SessionChatTable).values({
+            sessionId:sessionId,
+            createdBy:user?.primaryEmailAddress?.emailAddress,
+            notes:notes,
+            selectedDoctor:selectedDoctor,
+            createdOn:(new Date()).toString()
             //@ts-ignore
-            return NextResponse.json(result[0]?.usersTable);
-        }
-        return NextResponse.json(users[0]);
-    } catch (e) {
-        return NextResponse.json(e);
-        
-    }
+        }).returning({SessionChatTable})
 
-    
+        return NextResponse.json(result[0].SessionChatTable)
+    }catch(e){
+       return NextResponse.json(e);
+    }
 }
 
+
 export async function GET(req:NextRequest) {
-    const {searchParams}=new URL(req.url);
+    const {searchParams} = new URL(req.url);
     const sessionId = searchParams.get('sessionId');
     const user = await currentUser();
+
+     if (sessionId=='all'){
+        const result = await db.select().from(SessionChatTable)
+        //@ts-ignore
+        .where(eq(SessionChatTable.createdBy,user?.primaryEmailAddress?.emailAddress))
+        .orderBy(desc(SessionChatTable.id))
+        return NextResponse.json(result);
+     }
+     else{
+    const result = await db.select().from(SessionChatTable)
     //@ts-ignore
-    const result = await db.select().from(SessionChatTable).where(eq(SessionChatTable.sessionId, sessionId));
+    .where(eq(SessionChatTable.sessionId,sessionId));
+
     return NextResponse.json(result[0]);
+     }
 }
