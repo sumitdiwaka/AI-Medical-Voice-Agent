@@ -1,39 +1,94 @@
-import {openai} from "@/config/OpenAiModel";
+// import {openai} from "@/config/OpenAiModel";
+// import { AIDoctorAgents } from "@/shared/list";
+// import { NextRequest, NextResponse } from "next/server";
+
+
+// export async function POST(req:NextRequest){
+//     const {notes} = await req.json();
+//     try {
+//         const completion = await openai.chat.completions.create({
+//             model:"google/gemini-2.5-flash-lite-preview-06-17",
+//             messages:[
+//                 {role:'system',content:JSON.stringify(AIDoctorAgents)},
+//                 {role:"user",content:"User Notes/Symptoms:"+notes+",Depends on user notes and symptoms,Please suggest list of doctors,Return Object in JSON only"}
+//             ],
+//         });
+
+//         // const rawResp = completion.choices[0].message;
+//         const rawResp = completion.choices[0].message?.content || "";
+
+//           // Clean up response
+//         const cleanedResp = rawResp
+//             .trim()
+//             .replace(/^```json\s*/i, "")
+//             .replace(/```$/, "");
+
+//              const JSONResp = JSON.parse(cleanedResp);
+
+//         return NextResponse.json(JSONResp);
+
+//         //@ts-ignore
+//         // const Resp = rawResp.content().trim().replace('```json','').replace('```','') 
+//         // const JSONResp = JSON.parse(Resp);
+//         // return NextResponse.json(rawResp);
+//     } catch (e) {
+//         return NextResponse.json(e);
+        
+//     }
+// }
+
+
+
+import { openai } from "@/config/OpenAiModel";
 import { AIDoctorAgents } from "@/shared/list";
 import { NextRequest, NextResponse } from "next/server";
 
-
-export async function POST(req:NextRequest){
-    const {notes} = await req.json();
+export async function POST(req: NextRequest) {
+    const { notes } = await req.json();
     try {
+        // Ask AI to return ONLY the ids of matching doctors from our list
         const completion = await openai.chat.completions.create({
-            model:"google/gemini-2.5-flash-lite-preview-06-17",
-            messages:[
-                {role:'system',content:JSON.stringify(AIDoctorAgents)},
-                {role:"user",content:"User Notes/Symptoms:"+notes+",Depends on user notes and symptoms,Please suggest list of doctors,Return Object in JSON only"}
+            model: "google/gemini-2.5-flash-lite-preview-06-17",
+            messages: [
+                {
+                    role: 'system',
+                    content: `You are a medical assistant. Based on user symptoms, suggest the most relevant doctor specializations from this list only:
+${AIDoctorAgents.map(d => `id:${d.id} specialist:${d.specialist}`).join('\n')}
+
+Return ONLY a valid JSON array of ids (numbers). Example: [1, 3, 6]
+Do not include any explanation, markdown, or extra text.`
+                },
+                {
+                    role: "user",
+                    content: "User symptoms: " + notes
+                }
             ],
         });
 
-        // const rawResp = completion.choices[0].message;
         const rawResp = completion.choices[0].message?.content || "";
 
-          // Clean up response
-        const cleanedResp = rawResp
+        // Strip markdown fences if present
+        const cleaned = rawResp
             .trim()
             .replace(/^```json\s*/i, "")
-            .replace(/```$/, "");
+            .replace(/^```\s*/i, "")
+            .replace(/```$/, "")
+            .trim();
 
-             const JSONResp = JSON.parse(cleanedResp);
+        // Parse the ids array
+        const ids: number[] = JSON.parse(cleaned);
 
-        return NextResponse.json(JSONResp);
+        // Map ids back to full doctor objects from our local list
+        const suggestedDoctors = ids
+            .map(id => AIDoctorAgents.find(d => d.id === id))
+            .filter(Boolean); // remove any undefined if AI returns bad id
 
-        //@ts-ignore
-        // const Resp = rawResp.content().trim().replace('```json','').replace('```','') 
-        // const JSONResp = JSON.parse(Resp);
-        // return NextResponse.json(rawResp);
+        return NextResponse.json(suggestedDoctors);
+
     } catch (e) {
-        return NextResponse.json(e);
-        
+        console.error("suggest-doctors error:", e);
+        // Fallback: return first 3 doctors if AI fails
+        return NextResponse.json(AIDoctorAgents.slice(0, 3));
     }
 }
 
