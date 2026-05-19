@@ -9,4 +9,4 @@ function History () {
   )
 }
 
-export default page
+export default History
