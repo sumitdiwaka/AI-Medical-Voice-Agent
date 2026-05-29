@@ -416,14 +416,17 @@ function MedicalVoiceAgent() {
     }
   }
 
-  useEffect(() => {
-    return () => {
-      if (vapiInstance) {
-        // @ts-ignore
-        vapiInstance.stop().catch(console.error);
+ useEffect(() => {
+  return () => {
+    if (vapiInstance) {
+      try {
+        vapiInstance.stop();
+      } catch (e) {
+        console.error(e);
       }
-    };
-  }, [vapiInstance]);
+    }
+  };
+}, [vapiInstance]);
 
   return (
     <div className='p-5 border rounded-3xl bg-secondary'>
